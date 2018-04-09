@@ -69,6 +69,7 @@ mutable struct Progress <: AbstractProgress
     color::Symbol           # default to green
     output::IO              # output stream into which the progress is written
     numprintedvalues::Int   # num values printed below progress in last iteration
+    counterfirst::Int       # which iteration to continue progress from
 
     function Progress(n::Integer;
                       dt::Real=0.1,
@@ -76,11 +77,12 @@ mutable struct Progress <: AbstractProgress
                       color::Symbol=:green,
                       output::IO=STDERR,
                       barlen::Integer=tty_width(desc),
-                      barglyphs::BarGlyphs=BarGlyphs('|','█','█',' ','|'))
-        counter = 0
+                      barglyphs::BarGlyphs=BarGlyphs('|','█','█',' ','|'),
+                      counterfirst::Integer=1)
+        counter = counterfirst-1
         tfirst = tlast = time()
         printed = false
-        new(n, dt, counter, tfirst, tlast, printed, desc, barlen, barglyphs, color, output, 0)
+        new(n, dt, counter, tfirst, tlast, printed, desc, barlen, barglyphs, color, output, 0, counterfirst)
     end
 end
 
@@ -154,7 +156,12 @@ function updateProgress!(p::Progress; showvalues = Any[], valuecolor = :blue)
         percentage_complete = 100.0 * p.counter / p.n
         bar = barstring(p.barlen, percentage_complete, barglyphs=p.barglyphs)
         elapsed_time = t - p.tfirst
-        est_total_time = 100 * elapsed_time / percentage_complete
+        cfirst = p.counterfirst
+        if p.counter <= p.counterfirst
+            p.tfirst = t
+            cfirst = p.counter-1
+        end
+        est_total_time = elapsed_time * (p.n - cfirst) / (p.counter - cfirst)
         eta_sec = round(Int, est_total_time - elapsed_time )
         eta = durationstring(eta_sec)
         msg = @sprintf "%s%3u%%%s  ETA: %s" p.desc round(Int, percentage_complete) bar eta
